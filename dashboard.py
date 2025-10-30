@@ -12,7 +12,7 @@ from src.utils.dashboard_utils import get_player_lists
 
 # --- 1. 頁面配置 & 標題 ---
 st.set_page_config(layout="wide") # 讓介面使用寬螢幕
-st.title("⚾ MLB 外野手防守站位最佳化分析")
+st.title("MLB 外野手防守站位最佳化分析")
 
 # --- 2. 側邊欄 (Sidebar) 用於放置控制項 ---
 st.sidebar.header("分析參數選擇")
@@ -27,7 +27,7 @@ selected_cf = st.sidebar.selectbox("選擇中外野手 (CF):", [""] + cfs)
 selected_rf = st.sidebar.selectbox("選擇右外野手 (RF):", [""] + rfs)
 
 # 執行按鈕
-run_button = st.sidebar.button("🚀 執行分析")
+run_button = st.sidebar.button("執行分析")
 
 # --- 3. 主頁面 (用於顯示結果) ---
 if run_button:
