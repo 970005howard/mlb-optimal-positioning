@@ -1,0 +1,7 @@
+{
+    // 告訴 Python 語言伺服器 (Pylance) 在分析時，
+    // 額外將專案根目錄下的 'src' 資料夾加入搜尋路徑
+    "python.analysis.extraPaths": [
+        "./src"
+    ],
+}

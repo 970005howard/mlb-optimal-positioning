@@ -1,0 +1,11 @@
+# 檔案位置: requirements.txt
+
+streamlit
+pandas
+numpy
+pymc
+arviz
+scikit-learn
+joblib
+matplotlib
+seaborn
