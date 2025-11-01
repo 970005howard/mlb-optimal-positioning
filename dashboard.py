@@ -39,7 +39,7 @@ except FileNotFoundError as e:
     st.sidebar.error(f"載入球員列表失敗: {e}")
     st.sidebar.warning("請確認 'data/raw' 或 'data/03_inputs' 資料夾中已包含必要的球員資料檔案。")
     st.stop()
-catch_exceptions = st.sidebar.checkbox("捕獲並顯示執行錯誤（用於偵錯）", False)
+# catch_exceptions = st.sidebar.checkbox("捕獲並顯示執行錯誤（用於偵錯）", False)
 
 
 # 建立下拉選單
