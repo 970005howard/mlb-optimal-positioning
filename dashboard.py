@@ -149,9 +149,11 @@ if run_button:
             except FileNotFoundError as e:
                  st.error(f"分析過程中發生錯誤：找不到檔案。 {e}")
                  st.warning("請確認您已為此打者和外野手**完整**執行過 `main.py` 的**所有前置處理步驟** (step_00 到 step_03)。")
+            '''
             except Exception as e:
                 if catch_exceptions:
                     st.exception(e) # 如果勾選了偵錯，顯示完整錯誤
                 else:
                     st.error(f"分析過程中發生錯誤: {e}")
+            '''
 
