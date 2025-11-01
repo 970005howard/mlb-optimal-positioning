@@ -1,4 +1,5 @@
 # 檔案位置: src/evaluation/step_07_compare_initial_vs_optimal.py
+# (✨ 已更新：會一併計算並回傳「實際接殺球數」)
 
 import pandas as pd
 import numpy as np
@@ -109,6 +110,7 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
         "batter": batter_name,
         "fielders": fielder_names,
         "num_batted_balls": 0,
+        "actual_catches": "N/A", # <-- 【新功能】新增欄位
         "initial": {},
         "optimal": {},
         "summary": {}
@@ -118,6 +120,7 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
     print("\n--- 步驟 A: 載入資料 ---")
     try:
         # 1. 載入打者原始數據
+        # (路徑來自您上傳的程式碼)
         batter_file = INPUTS_DATA_DIR / "batter_spray_charts" / f"{batter_name}.csv"
         batter_df_raw = pd.read_csv(batter_file, encoding='utf-8')
         
@@ -149,10 +152,27 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
     # --- 步驟 B: 預處理打者數據 ---
     print("\n--- 步驟 B: 處理擊球特徵 ---")
     batter_df_processed = calculate_batted_ball_features(batter_df_raw)
+    
+    # 篩選出用於模型評估的有效擊球 (有座標和飛行時間)
     batter_df = batter_df_processed.dropna(subset=[COL_X_COORD, COL_Y_COORD, COL_FLIGHT_TIME])
     num_batted_balls = len(batter_df)
     results["num_batted_balls"] = num_batted_balls # ✨ [新增] 儲存擊球總數
     print(f"  - 處理完成，共 {num_batted_balls} 筆有效擊球數據。")
+
+    # --- ▼▼▼ 【新功能】計算實際接殺球數 ▼▼▼ ---
+    # 我們在這裡使用 batter_df_raw (原始資料) 來計算，
+    # 這樣可以包含所有擊球，而不僅僅是模型能處理的球
+    if 'events' not in batter_df_raw.columns:
+        print(f"  - [警告] 原始檔案 {batter_file.name} 中找不到 'events' 欄位。無法計算實際接殺數。")
+        results["actual_catches"] = "N/A"
+    else:
+        # 您的邏輯: 'field_out' 或 'field_error' 都算接殺
+        catch_events = ['field_out', 'field_error']
+        actual_catches = batter_df_raw[batter_df_raw['events'].isin(catch_events)].shape[0]
+        print(f"  - 計算完成，在「所有」原始擊球中，有 {actual_catches} 筆實際接殺。")
+        
+    results["actual_catches"] = actual_catches # ✨ [新增] 儲存實際接殺數
+    # --- ▲▲▲ 【新功能】結束 ▲▲▲ ---
 
     # --- 步驟 C: 計算兩種情境下的表現 ---
     print("\n--- 步驟 C: 計算表現指標 ---")
