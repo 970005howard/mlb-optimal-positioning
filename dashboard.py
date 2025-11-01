@@ -1,5 +1,5 @@
 # 檔案位置: dashboard.py
-# (✨ 已更新：從 results_data 讀取「實際接殺球數」)
+# (✨ 已更新：從 results_data 讀取「實際接殺球數」和「最佳 vs 實際」)
 
 import streamlit as st
 from pathlib import Path
@@ -116,8 +116,31 @@ if run_button:
                     st.metric(label="平均團隊接殺機率", value=f"{results_data['optimal']['avg_prob']:.2f}%")
 
                     st.subheader("總結:")
-                    st.metric(label="預期額外增加的出局數", value=f"{results_data['summary']['score_diff']:.2f}")
-                    st.metric(label="平均團隊接殺機率提升", value=f"{results_data['summary']['prob_diff']:.2f}%")
+                    
+                    # --- ▼▼▼ 【邏輯已更新】 ▼▼▼ ---
+                    # 讀取您要的新指標 ("最佳 vs 實際")
+                    score_diff_actual = results_data['summary'].get('score_diff_vs_actual', 'N/A')
+                    if score_diff_actual != 'N/A':
+                        st.metric(label="預期額外增加的出局數 (vs. 實際)", 
+                                  value=f"{score_diff_actual:.2f} 球",
+                                  help="最佳化站位的『預期總接殺』扣除『實際接殺球數』的差額。")
+                    else:
+                        # 備用：如果 vs. 實際無法計算，就顯示 vs. 初始
+                        score_diff_initial = results_data['summary'].get('score_diff_vs_initial', 'N/A')
+                        if score_diff_initial != 'N/A':
+                            st.metric(label="預期額外增加的出局數 (vs. 初始)", 
+                                      value=f"{score_diff_initial:.2f} 球", 
+                                      help="無法計算 'vs. 實際'，改為顯示 '最佳 vs. 初始' 的差額。")
+                        else:
+                            st.metric(label="預期額外增加的出局數", value="N/A")
+                    
+                    # 顯示機率提升 (不變)
+                    prob_diff = results_data['summary'].get('prob_diff', 'N/A')
+                    if prob_diff != 'N/A':
+                        st.metric(label="平均團隊接殺機率提升", 
+                                  value=f"{prob_diff:.2f}%",
+                                  help="最佳化站位 vs. 初始站位的平均接殺機率差異。")
+                    # --- ▲▲▲ 【更新結束】 ▲▲▲ ---
 
                 # --- 在右側欄位 (col2) 顯示 Step 05 的圖表 ---
                 with col2:
@@ -127,4 +150,8 @@ if run_button:
                  st.error(f"分析過程中發生錯誤：找不到檔案。 {e}")
                  st.warning("請確認您已為此打者和外野手**完整**執行過 `main.py` 的**所有前置處理步驟** (step_00 到 step_03)。")
             except Exception as e:
-                st.error(f"分析過程中發生錯誤: {e}")
+                if catch_exceptions:
+                    st.exception(e) # 如果勾選了偵錯，顯示完整錯誤
+                else:
+                    st.error(f"分析過程中發生錯誤: {e}")
+

@@ -1,5 +1,5 @@
 # 檔案位置: src/evaluation/step_07_compare_initial_vs_optimal.py
-# (✨ 已更新：會一併計算並回傳「實際接殺球數」)
+# (✨ 已更新：會計算並回傳「實際接殺球數」以及「最佳 vs 實際」的差異)
 
 import pandas as pd
 import numpy as np
@@ -164,7 +164,7 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
     # 這樣可以包含所有擊球，而不僅僅是模型能處理的球
     if 'events' not in batter_df_raw.columns:
         print(f"  - [警告] 原始檔案 {batter_file.name} 中找不到 'events' 欄位。無法計算實際接殺數。")
-        results["actual_catches"] = "N/A"
+        actual_catches = "N/A"
     else:
         # 您的邏輯: 'field_out' 或 'field_error' 都算接殺
         catch_events = ['field_out', 'field_error']
@@ -202,12 +202,22 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
 
     # --- 步驟 D: 匯總結果 ---
     print("\n--- 步驟 D: 匯總效益 ---")
-    score_diff = optimal_score - initial_score
+    
+    # 原始的 "最佳 vs 初始"
+    score_diff_vs_initial = optimal_score - initial_score
     prob_diff = optimal_avg_prob - initial_avg_prob
+    
+    # 【新邏輯】 "最佳 vs 實際"
+    score_diff_vs_actual = "N/A"
+    if isinstance(actual_catches, (int, float)):
+         score_diff_vs_actual = optimal_score - actual_catches
+    else:
+        print("  - [警告] 'actual_catches' 不是數字，無法計算 '最佳 vs 實際' 差異。")
     
     # 儲存總結
     results["summary"] = {
-        "score_diff": score_diff,
+        "score_diff_vs_initial": score_diff_vs_initial, # 儲存 vs 初始
+        "score_diff_vs_actual": score_diff_vs_actual, # 儲存 vs 實際
         "prob_diff": prob_diff
     }
 
@@ -237,3 +247,4 @@ if __name__ == "__main__":
         print("\n--- 函式返回結果 (測試) ---")
         import json
         print(json.dumps(analysis_results, indent=2))
+
