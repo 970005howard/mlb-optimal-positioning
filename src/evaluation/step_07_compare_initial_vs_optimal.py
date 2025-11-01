@@ -1,5 +1,5 @@
 # 檔案位置: src/evaluation/step_07_compare_initial_vs_optimal.py
-# (✨ 已更新：會計算並回傳「每位球員」的「實際」和「預期」接殺數)
+# (✨ 已更新：會計算並回傳「實際接殺球數」以及「最佳 vs 實際」的差異)
 
 import pandas as pd
 import numpy as np
@@ -22,6 +22,9 @@ from src.optimization.step_04_find_optimal_position import (
 # --- 1. 輔助函式：載入球員的「初始」站位 ---
 # (此函式維持不變)
 def load_initial_positions(fielder_names: dict) -> dict:
+    """
+    從 positioning.csv 檔案中讀取指定球員的平均站位，並轉換為 XY 座標。
+    """
     initial_positions = {}
     for pos_code, player_name in fielder_names.items():
         positioning_file = RAW_DATA_DIR / f"{pos_code}_positioning.csv"
@@ -48,11 +51,10 @@ def load_initial_positions(fielder_names: dict) -> dict:
     return initial_positions
 
 # --- 2. 輔助函式：計算給定站位下的團隊表現 ---
-# (✨ 已更新：回傳值增加了 "individual_scores" 字典)
+# (此函式維持不變)
 def calculate_team_performance(positions: dict, batter_df: pd.DataFrame, scalers: dict, player_params: dict, fielder_names: dict) -> tuple:
     """
     計算在給定站位下，團隊的總接殺分數和平均接殺機率。
-    【已更新】: 現在也回傳「個人」的預期接殺總數。
     """
     lf_x, lf_y = positions['LF']
     cf_x, cf_y = positions['CF']
@@ -88,27 +90,16 @@ def calculate_team_performance(positions: dict, batter_df: pd.DataFrame, scalers
     # 計算團隊機率
     prob_team_per_ball = 1 - (1 - prob_lf) * (1 - prob_cf) * (1 - prob_rf)
     
-    # 團隊總分 (預期總接殺數)
     total_score = np.sum(prob_team_per_ball)
-    # 團隊平均機率
     avg_prob = np.mean(prob_team_per_ball) * 100
     
-    # --- ▼▼▼ 【新功能】計算個人預期接殺數 ▼▼▼ ---
-    # 假設：一個球員的預期接殺數 = 他對所有球的接殺機率總和
-    individual_scores = {
-        "LF": np.sum(prob_lf),
-        "CF": np.sum(prob_cf),
-        "RF": np.sum(prob_rf)
-    }
-    # --- ▲▲▲ 【新功能】結束 ▲▲▲ ---
-    
-    # (✨ 已更新：回傳值增加 individual_scores)
-    return total_score, avg_prob, individual_scores
+    return total_score, avg_prob
 
 # --- 3. 主流程函式 (返回一個結果字典) ---
 def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
     """
     比較初始站位和最佳站位下的團隊接殺表現。
+    [修改] 此版本返回一個包含結果的字典，而不是列印它們。
     """
     print("=== 開始比較初始站位 vs. 最佳站位的團隊表現 ===")
     print(f"打者: {batter_name}")
@@ -119,8 +110,7 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
         "batter": batter_name,
         "fielders": fielder_names,
         "num_batted_balls": 0,
-        "actual_catches_team": "N/A",      # 團隊實際接殺
-        "actual_catches_individual": {}, # 個人實際接殺
+        "actual_catches": "N/A", # <-- 【新功能】新增欄位
         "initial": {},
         "optimal": {},
         "summary": {}
@@ -130,6 +120,7 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
     print("\n--- 步驟 A: 載入資料 ---")
     try:
         # 1. 載入打者原始數據
+        # (路徑來自您上傳的程式碼)
         batter_file = INPUTS_DATA_DIR / "batter_spray_charts" / f"{batter_name}.csv"
         batter_df_raw = pd.read_csv(batter_file, encoding='utf-8')
         
@@ -155,6 +146,7 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
         
     except (FileNotFoundError, ValueError, KeyError) as e:
         print(f"❌ [錯誤] 載入資料失敗: {e}")
+        print("請確認您已成功執行了對應的 `--optimize` 指令，並且 positioning.csv 檔案存在且包含指定球員。")
         return None # 發生錯誤時返回 None
 
     # --- 步驟 B: 預處理打者數據 ---
@@ -164,64 +156,47 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
     # 篩選出用於模型評估的有效擊球 (有座標和飛行時間)
     batter_df = batter_df_processed.dropna(subset=[COL_X_COORD, COL_Y_COORD, COL_FLIGHT_TIME])
     num_batted_balls = len(batter_df)
-    results["num_batted_balls"] = num_batted_balls 
+    results["num_batted_balls"] = num_batted_balls # ✨ [新增] 儲存擊球總數
     print(f"  - 處理完成，共 {num_batted_balls} 筆有效擊球數據。")
 
-    # --- ▼▼▼ 【新功能】計算「實際」接殺球數 (團隊 & 個人) ▼▼▼ ---
-    if 'events' not in batter_df_raw.columns or 'hit_location' not in batter_df_raw.columns:
-        print(f"  - [警告] 原始檔案 {batter_file.name} 中找不到 'events' 或 'hit_location' 欄位。")
-        results["actual_catches_team"] = "N/A"
-        results["actual_catches_individual"] = {"LF": "N/A", "CF": "N/A", "RF": "N/A"}
+    # --- ▼▼▼ 【新功能】計算實際接殺球數 ▼▼▼ ---
+    # 我們在這裡使用 batter_df_raw (原始資料) 來計算，
+    # 這樣可以包含所有擊球，而不僅僅是模型能處理的球
+    if 'events' not in batter_df_raw.columns:
+        print(f"  - [警告] 原始檔案 {batter_file.name} 中找不到 'events' 欄位。無法計算實際接殺數。")
+        actual_catches = "N/A"
     else:
         # 您的邏輯: 'field_out' 或 'field_error' 都算接殺
         catch_events = ['field_out', 'field_error']
-        catches_df = batter_df_raw[batter_df_raw['events'].isin(catch_events)]
+        actual_catches = batter_df_raw[batter_df_raw['events'].isin(catch_events)].shape[0]
+        print(f"  - 計算完成，在「所有」原始擊球中，有 {actual_catches} 筆實際接殺。")
         
-        # 團隊總實際接殺
-        actual_catches_team = catches_df.shape[0]
-        results["actual_catches_team"] = actual_catches_team
-        print(f"  - 計算完成，團隊「實際」接殺總數為: {actual_catches_team}")
-
-        # 個人實際接殺 (基於 hit_location: 7=LF, 8=CF, 9=RF)
-        # 附註： 'hit_location' 在 Statcast 中是 float，所以用 7.0, 8.0, 9.0
-        actual_catches_lf = catches_df[catches_df['hit_location'] == 7.0].shape[0]
-        actual_catches_cf = catches_df[catches_df['hit_location'] == 8.0].shape[0]
-        actual_catches_rf = catches_df[catches_df['hit_location'] == 9.0].shape[0]
-        
-        results["actual_catches_individual"] = {
-            "LF": actual_catches_lf,
-            "CF": actual_catches_cf,
-            "RF": actual_catches_rf
-        }
-        print(f"  - 個人「實際」接殺: LF={actual_catches_lf}, CF={actual_catches_cf}, RF={actual_catches_rf}")
-        
+    results["actual_catches"] = actual_catches # ✨ [新增] 儲存實際接殺數
     # --- ▲▲▲ 【新功能】結束 ▲▲▲ ---
 
     # --- 步驟 C: 計算兩種情境下的表現 ---
     print("\n--- 步驟 C: 計算表現指標 ---")
-    # 1. 計算初始站位下的表現 (✨ 已更新：接收 3 個回傳值)
-    initial_score, initial_avg_prob, initial_indiv_scores = calculate_team_performance(
+    # 1. 計算初始站位下的表現
+    initial_score, initial_avg_prob = calculate_team_performance(
         initial_positions, batter_df, scalers, player_params, fielder_names
     )
     # 儲存初始站位結果
     results["initial"] = {
         "positions": initial_positions,
         "score": initial_score,
-        "avg_prob": initial_avg_prob,
-        "individual_scores": initial_indiv_scores # <-- ✨ 新增
+        "avg_prob": initial_avg_prob
     }
     print("  - 初始站位表現計算完成。")
     
-    # 2. 計算最佳站位下的表現 (✨ 已更新：接收 3 個回傳值)
-    optimal_score, optimal_avg_prob, optimal_indiv_scores = calculate_team_performance(
+    # 2. 計算最佳站位下的表現
+    optimal_score, optimal_avg_prob = calculate_team_performance(
         optimal_positions, batter_df, scalers, player_params, fielder_names
     )
     # 儲存最佳站位結果
     results["optimal"] = {
         "positions": optimal_positions,
         "score": optimal_score,
-        "avg_prob": optimal_avg_prob,
-        "individual_scores": optimal_indiv_scores # <-- ✨ 新增
+        "avg_prob": optimal_avg_prob
     }
     print("  - 最佳站位表現計算完成。")
 
@@ -234,10 +209,10 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
     
     # 【新邏輯】 "最佳 vs 實際"
     score_diff_vs_actual = "N/A"
-    if isinstance(results["actual_catches_team"], (int, float)):
-         score_diff_vs_actual = optimal_score - results["actual_catches_team"]
+    if isinstance(actual_catches, (int, float)):
+         score_diff_vs_actual = optimal_score - actual_catches
     else:
-        print("  - [警告] 'actual_catches_team' 不是數字，無法計算 '最佳 vs 實際' 差異。")
+        print("  - [警告] 'actual_catches' 不是數字，無法計算 '最佳 vs 實際' 差異。")
     
     # 儲存總結
     results["summary"] = {
@@ -245,6 +220,8 @@ def compare_initial_vs_optimal(batter_name: str, fielder_names: dict) -> dict:
         "score_diff_vs_actual": score_diff_vs_actual, # 儲存 vs 實際
         "prob_diff": prob_diff
     }
+
+    # 移除所有原本在終端機顯示結果的 print() 敘述
     
     print("=======================================================")
     print(f"      針對打者 [{batter_name}] 的效益評估計算完成      ")
