@@ -27,7 +27,7 @@ except ImportError as e:
 
 # --- 1. 頁面配置 & 標題 ---
 st.set_page_config(layout="wide") # 讓介面使用寬螢幕
-st.title("⚾ MLB 外野手防守站位最佳化分析")
+st.title("MLB 外野手防守站位最佳化分析")
 
 # --- 2. 側邊欄 (Sidebar) 用於放置控制項 ---
 st.sidebar.header("分析參數選擇")
@@ -39,7 +39,7 @@ except FileNotFoundError as e:
     st.sidebar.error(f"載入球員列表失敗: {e}")
     st.sidebar.warning("請確認 'data/raw' 或 'data/03_inputs' 資料夾中已包含必要的球員資料檔案。")
     st.stop()
-catch_exceptions = st.sidebar.checkbox("捕獲並顯示執行錯誤（用於偵錯）", True)
+catch_exceptions = st.sidebar.checkbox("捕獲並顯示執行錯誤（用於偵錯）", False)
 
 
 # 建立下拉選單
@@ -96,9 +96,9 @@ if run_button:
                         st.warning("無法載入實際統計數據。")
                         st.info("請確認 'step_07' 執行正常，且 'events' 欄位存在。")
                     else:
-                        st.metric(label="實際接殺球數 (Actual Catches)", value=f"{actual_catches} 球")
+                        st.metric(label="實際接殺球數", value=f"{actual_catches} 球")
                         # 這裡的 total_balls 是 step_07 用來評估的「有效擊球數」
-                        st.metric(label="用於評估的總擊球數", value=f"{total_balls} 球")
+                        st.metric(label="總擊球數", value=f"{total_balls} 球")
                     # --- ▲▲▲ 【修改結束】 ▲▲▲ ---
 
                     st.header("調整站位後評估")
