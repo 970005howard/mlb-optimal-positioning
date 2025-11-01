@@ -1,12 +1,13 @@
 # 檔案位置: dashboard.py
-# (✨ 已更新：顯示「每位球員」的「實際」和「預期」接殺數)
+# (✨ 已更新：從 results_data 讀取「實際接殺球數」和「最佳 vs 實際」)
 
 import streamlit as st
 from pathlib import Path
-import pandas as pd 
-import sys          
+import pandas as pd # <-- 新增
+import sys          # <-- 新增
 
 # --- 關鍵設定：將專案根目錄加入 Python 路徑 ---
+# 這能確保 streamlit 能找到 'src' 和 'utils' 資料夾
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
@@ -26,7 +27,7 @@ except ImportError as e:
 
 # --- 1. 頁面配置 & 標題 ---
 st.set_page_config(layout="wide") # 讓介面使用寬螢幕
-st.title("⚾ MLB 外野手防守站位最佳化分析")
+st.title("MLB 外野手防守站位最佳化分析")
 
 # --- 2. 側邊欄 (Sidebar) 用於放置控制項 ---
 st.sidebar.header("分析參數選擇")
@@ -38,14 +39,14 @@ except FileNotFoundError as e:
     st.sidebar.error(f"載入球員列表失敗: {e}")
     st.sidebar.warning("請確認 'data/raw' 或 'data/03_inputs' 資料夾中已包含必要的球員資料檔案。")
     st.stop()
-catch_exceptions = st.sidebar.checkbox("捕獲並顯示執行錯誤（用於偵錯）", True)
+# catch_exceptions = st.sidebar.checkbox("捕獲並顯示執行錯誤（用於偵錯）", False)
 
 
 # 建立下拉選單
 selected_batter = st.sidebar.selectbox("選擇打者:", [""] + batters)
 selected_lf = st.sidebar.selectbox("選擇左外野手 (LF):", [""] + lfs)
 selected_cf = st.sidebar.selectbox("選擇中外野手 (CF):", [""] + cfs)
-selected_rf = st.sidebar.selectbox("選擇右外野手 (RF):", [""]* + rfs)
+selected_rf = st.sidebar.selectbox("選擇右外野手 (RF):", [""] + rfs)
 
 # 執行按鈕
 run_button = st.sidebar.button("執行分析")
@@ -65,12 +66,15 @@ if run_button:
         with st.spinner("正在執行分析... (這可能需要 1-2 分鐘)"):
             try:
                 # 1. 執行最佳化 (Step 4)
+                #    (這會產生 .json 檔案)
                 run_team_optimization(selected_batter, fielder_names)
                 
                 # 2. 執行效益比較 (Step 7)
+                #    (這會讀取 .json 並回傳包含所有數據的字典)
                 results_data = compare_initial_vs_optimal(selected_batter, fielder_names)
                 
                 # 3. 執行視覺化 (Step 5)
+                #    (這會讀取 .json 並回傳圖表)
                 fig = visualize_team_alignment(selected_batter, fielder_names)
                 
                 st.success("分析完成！")
@@ -81,84 +85,62 @@ if run_button:
                 # --- 在左側欄位 (col1) 顯示 Step 07 的結果 ---
                 with col1:
                     
-                    # --- ▼▼▼ 【已更新】顯示「實際」統計數據 (團隊 & 個人) ▼▼▼ ---
+                    # --- ▼▼▼ 【新功能】顯示實際統計數據 ▼▼▼ ---
                     st.header("實際擊球統計")
                     
-                    actual_catches_team = results_data.get('actual_catches_team', 'N/A')
+                    # 直接從 results_data 讀取，不再自己計算
+                    actual_catches = results_data.get('actual_catches', 'N/A')
                     total_balls = results_data.get('num_batted_balls', 'N/A')
-                    actual_indiv = results_data.get('actual_catches_individual', {})
                     
-                    if actual_catches_team == 'N/A' or total_balls == 'N/A':
+                    if actual_catches == 'N/A' or total_balls == 'N/A':
                         st.warning("無法載入實際統計數據。")
+                        st.info("請確認 'step_07' 執行正常，且 'events' 欄位存在。")
                     else:
-                        st.metric(label="團隊實際接殺球數 (Team Actual Catches)", value=f"{actual_catches_team} 球")
-                        st.metric(label="用於評估的總擊球數", value=f"{total_balls} 球")
-                        
-                        # 顯示個人實際接殺
-                        st.markdown("---")
-                        st.markdown(f"**個人實際接殺** (基於 `hit_location`):")
-                        st.text(f"  {fielder_names['LF']} (LF): {actual_indiv.get('LF', 'N/A')} 球")
-                        st.text(f"  {fielder_names['CF']} (CF): {actual_indiv.get('CF', 'N/A')} 球")
-                        st.text(f"  {fielder_names['RF']} (RF): {actual_indiv.get('RF', 'N/A')} 球")
-                        st.markdown("---")
-                    # --- ▲▲▲ 【更新結束】 ▲▲▲ ---
+                        st.metric(label="實際接殺球數", value=f"{actual_catches} 球")
+                        # 這裡的 total_balls 是 step_07 用來評估的「有效擊球數」
+                        st.metric(label="總擊球數", value=f"{total_balls} 球")
+                    # --- ▲▲▲ 【修改結束】 ▲▲▲ ---
 
                     st.header("調整站位後評估")
                     
-                    # --- ▼▼▼ 【已更新】顯示「初始」站位 (團隊 & 個人) ▼▼▼ ---
                     st.subheader("初始站位:")
-                    init_data = results_data.get("initial", {})
-                    init_indiv = init_data.get('individual_scores', {})
-                    
-                    for pos, coords in init_data.get("positions", {}).items():
+                    for pos, coords in results_data["initial"]["positions"].items():
                         st.text(f"{pos}: (X={coords[0]:.2f}, Y={coords[1]:.2f})")
-                    st.text(f"預期團隊接殺: {init_data.get('score', 'N/A'):.2f} / {total_balls} 球")
-                    
-                    # 顯示個人預期 (初始)
-                    st.markdown(f"**個人預期接殺 (初始站位):**")
-                    st.text(f"  {fielder_names['LF']} (LF): {init_indiv.get('LF', 'N/A'):.2f} 球")
-                    st.text(f"  {fielder_names['CF']} (CF): {init_indiv.get('CF', 'N/A'):.2f} 球")
-                    st.text(f"  {fielder_names['RF']} (RF): {init_indiv.get('RF', 'N/A'):.2f} 球")
-                    st.metric(label="平均團隊接殺機率", value=f"{init_data.get('avg_prob', 'N/A'):.2f}%")
-                    # --- ▲▲▲ 【更新結束】 ▲▲▲ ---
+                    st.text(f"預期總接殺: {results_data['initial']['score']:.2f} / {results_data['num_batted_balls']} 球")
+                    st.metric(label="平均團隊接殺機率", value=f"{results_data['initial']['avg_prob']:.2f}%")
 
-                    # --- ▼▼▼ 【已更新】顯示「最佳」站位 (團隊 & 個人) ▼▼▼ ---
                     st.subheader("最佳化站位:")
-                    opt_data = results_data.get("optimal", {})
-                    opt_indiv = opt_data.get('individual_scores', {})
-
-                    for pos, coords in opt_data.get("positions", {}).items():
+                    for pos, coords in results_data["optimal"]["positions"].items():
                         st.text(f"{pos}: (X={coords[0]:.2f}, Y={coords[1]:.2f})")
-                    st.text(f"預期團隊接殺: {opt_data.get('score', 'N/A'):.2f} / {total_balls} 球")
-
-                    # 顯示個人預期 (最佳)
-                    st.markdown(f"**個人預期接殺 (最佳站位):**")
-                    st.text(f"  {fielder_names['LF']} (LF): {opt_indiv.get('LF', 'N/A'):.2f} 球")
-                    st.text(f"  {fielder_names['CF']} (CF): {opt_indiv.get('CF', 'N/A'):.2f} 球")
-                    st.text(f"  {fielder_names['RF']} (RF): {opt_indiv.get('RF', 'N/A'):.2f} 球")
-                    st.metric(label="平均團隊接殺機率", value=f"{opt_data.get('avg_prob', 'N/A'):.2f}%")
-                    # --- ▲▲▲ 【更新結束】 ▲▲▲ ---
+                    st.text(f"預期總接殺: {results_data['optimal']['score']:.2f} / {results_data['num_batted_balls']} 球")
+                    st.metric(label="平均團隊接殺機率", value=f"{results_data['optimal']['avg_prob']:.2f}%")
 
                     st.subheader("總結:")
                     
-                    # (這部分的邏輯與上一版相同，使用 'vs. 實際')
-                    summary_data = results_data.get("summary", {})
-                    score_diff_actual = summary_data.get('score_diff_vs_actual', 'N/A')
-                    
+                    # --- ▼▼▼ 【邏輯已更新】 ▼▼▼ ---
+                    # 讀取您要的新指標 ("最佳 vs 實際")
+                    score_diff_actual = results_data['summary'].get('score_diff_vs_actual', 'N/A')
                     if score_diff_actual != 'N/A':
                         st.metric(label="預期額外增加的出局數 (vs. 實際)", 
                                   value=f"{score_diff_actual:.2f} 球",
-                                  help="最佳化站位的『預期總接殺』扣除『團隊實際接殺球數』的差額。")
+                                  help="最佳化站位的『預期總接殺』扣除『實際接殺球數』的差額。")
                     else:
-                        score_diff_initial = summary_data.get('score_diff_vs_initial', 'N/A')
-                        st.metric(label="預期額外增加的出局數 (vs. 初始)", 
-                                  value=f"{score_diff_initial:.2f} 球", 
-                                  help="無法計算 'vs. 實際'，改為顯示 '最佳 vs. 初始' 的差額。")
+                        # 備用：如果 vs. 實際無法計算，就顯示 vs. 初始
+                        score_diff_initial = results_data['summary'].get('score_diff_vs_initial', 'N/A')
+                        if score_diff_initial != 'N/A':
+                            st.metric(label="預期額外增加的出局數 (vs. 初始)", 
+                                      value=f"{score_diff_initial:.2f} 球", 
+                                      help="無法計算 'vs. 實際'，改為顯示 '最佳 vs. 初始' 的差額。")
+                        else:
+                            st.metric(label="預期額外增加的出局數", value="N/A")
                     
-                    prob_diff = summary_data.get('prob_diff', 'N/A')
-                    st.metric(label="平均團隊接殺機率提升", 
-                              value=f"{prob_diff:.2f}%",
-                              help="最佳化站位 vs. 初始站位的平均接殺機率差異。")
+                    # 顯示機率提升 (不變)
+                    prob_diff = results_data['summary'].get('prob_diff', 'N/A')
+                    if prob_diff != 'N/A':
+                        st.metric(label="平均團隊接殺機率提升", 
+                                  value=f"{prob_diff:.2f}%",
+                                  help="最佳化站位 vs. 初始站位的平均接殺機率差異。")
+                    # --- ▲▲▲ 【更新結束】 ▲▲▲ ---
 
                 # --- 在右側欄位 (col2) 顯示 Step 05 的圖表 ---
                 with col2:
@@ -167,9 +149,11 @@ if run_button:
             except FileNotFoundError as e:
                  st.error(f"分析過程中發生錯誤：找不到檔案。 {e}")
                  st.warning("請確認您已為此打者和外野手**完整**執行過 `main.py` 的**所有前置處理步驟** (step_00 到 step_03)。")
+            '''
             except Exception as e:
                 if catch_exceptions:
                     st.exception(e) # 如果勾選了偵錯，顯示完整錯誤
                 else:
                     st.error(f"分析過程中發生錯誤: {e}")
+            '''
 
