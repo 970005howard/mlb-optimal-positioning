@@ -45,7 +45,7 @@ catch_exceptions = st.sidebar.checkbox("捕獲並顯示執行錯誤（用於偵�
 selected_batter = st.sidebar.selectbox("選擇打者:", [""] + batters)
 selected_lf = st.sidebar.selectbox("選擇左外野手 (LF):", [""] + lfs)
 selected_cf = st.sidebar.selectbox("選擇中外野手 (CF):", [""] + cfs)
-selected_rf = st.sidebar.selectbox("選擇右外野手 (RF):", [""]* + rfs)
+selected_rf = st.sidebar.selectbox("選擇右外野手 (RF):", [""] + rfs)
 
 # 執行按鈕
 run_button = st.sidebar.button("執行分析")
